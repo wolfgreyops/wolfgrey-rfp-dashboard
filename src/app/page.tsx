@@ -9,6 +9,7 @@ const tabs = [
   { id: "overview", label: "Overview" },
   { id: "opportunities", label: "Opportunities" },
   { id: "pipeline", label: "Pipeline" },
+  { id: "archived", label: "Archived" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -56,6 +57,7 @@ export default function Home() {
         {activeTab === "overview" && <Overview />}
         {activeTab === "opportunities" && <OpportunitiesTable />}
         {activeTab === "pipeline" && <Pipeline />}
+        {activeTab === "archived" && <OpportunitiesTable archived />}
       </main>
     </div>
   );

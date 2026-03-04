@@ -20,7 +20,8 @@ export default function Overview() {
         supabase.from("rfp_opportunities").select("*").order("created_at", { ascending: false }),
         supabase.from("rfp_search_runs").select("*").order("created_at", { ascending: false }).limit(20),
       ]);
-      setOpportunities(oppRes.data || []);
+      const today = new Date().toISOString().split("T")[0];
+      setOpportunities((oppRes.data || []).filter((o) => !o.due_date || o.due_date >= today));
       setRuns(runRes.data || []);
       setLoading(false);
     }

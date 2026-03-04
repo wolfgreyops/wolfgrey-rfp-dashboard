@@ -3,23 +3,28 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase, RFPOpportunity } from "@/lib/supabase";
 
-export default function OpportunitiesTable() {
+export default function OpportunitiesTable({ archived = false }: { archived?: boolean }) {
   const [opportunities, setOpportunities] = useState<RFPOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortField, setSortField] = useState<"title" | "due_date" | "source_name" | "estimated_value">("due_date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(archived ? "desc" : "asc");
 
   useEffect(() => {
     async function load() {
       const { data } = await supabase.from("rfp_opportunities").select("*").order("created_at", { ascending: false });
-      setOpportunities(data || []);
+      const today = new Date().toISOString().split("T")[0];
+      const filtered = (data || []).filter((o) => {
+        const isPastDue = o.due_date && o.due_date < today;
+        return archived ? isPastDue : !isPastDue;
+      });
+      setOpportunities(filtered);
       setLoading(false);
     }
     load();
-  }, []);
+  }, [archived]);
 
   const sources = useMemo(() => [...new Set(opportunities.map((o) => o.source_name))].sort(), [opportunities]);
   const categories = useMemo(() => [...new Set(opportunities.map((o) => o.source_category))].sort(), [opportunities]);

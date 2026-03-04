@@ -20,7 +20,8 @@ export default function Pipeline() {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("rfp_opportunities").select("*").order("updated_at", { ascending: false });
-    setOpportunities(data || []);
+    const today = new Date().toISOString().split("T")[0];
+    setOpportunities((data || []).filter((o) => !o.due_date || o.due_date >= today));
     setLoading(false);
   }, []);
 
