@@ -3,14 +3,47 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase, RFPOpportunity } from "@/lib/supabase";
 
+const DECORATION_METHODS = [
+  { label: "Embroidery", pattern: /\bembroidery\b|\bembroidered\b|\bembroider\b/i },
+  { label: "Screen Print", pattern: /\bscreen\s*print(ing|ed)?\b|\bsilkscreen\b/i },
+  { label: "Heat Transfer", pattern: /\bheat\s*transfer(s)?\b|\bheat\s*applied\b/i },
+  { label: "Sublimation", pattern: /\bsublimation\b|\bdye\s*sublimation\b|\bsublimated\b/i },
+  { label: "DTG", pattern: /\bdtg\b|\bdirect[\s-]to[\s-]garment\b/i },
+  { label: "Digital Print", pattern: /\bdigital\s*print(ing|ed)?\b/i },
+  { label: "Pad Print", pattern: /\bpad\s*print(ing|ed)?\b/i },
+  { label: "Laser Engrave", pattern: /\blaser\s*engrav(ing|ed|e)?\b/i },
+  { label: "Vinyl", pattern: /\bvinyl\b|\bcut\s*vinyl\b|\bheat\s*press\b/i },
+  { label: "Patches", pattern: /\bpatch(es)?\b|\btackle\s*twill\b|\bwoven\s*patch\b/i },
+  { label: "Reflective", pattern: /\breflective\b|\bhigh[\s-]vis\b|\hhigh[\s-]visibility\b/i },
+  { label: "Puff Print", pattern: /\bpuff\s*print(ing|ed)?\b|\bfoam\s*print\b/i },
+];
+
+function extractDecorationMethods(text: string | null): string[] {
+  if (!text) return [];
+  return DECORATION_METHODS.filter((m) => m.pattern.test(text)).map((m) => m.label);
+}
+
+function parseRevenue(raw: string | null): { display: string; numeric: number } {
+  if (!raw) return { display: "—", numeric: 0 };
+  const num = parseFloat(raw.replace(/[^0-9.-]/g, "")) || 0;
+  const display = num >= 1_000_000
+    ? `$${(num / 1_000_000).toFixed(2)}M`
+    : num >= 1_000
+    ? `$${(num / 1_000).toFixed(0)}K`
+    : raw;
+  return { display, numeric: num };
+}
+
 export default function OpportunitiesTable() {
   const [opportunities, setOpportunities] = useState<RFPOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [decorationFilter, setDecorationFilter] = useState("all");
   const [sortField, setSortField] = useState<"title" | "due_date" | "source_name" | "estimated_value">("due_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -36,6 +69,9 @@ export default function OpportunitiesTable() {
     }
     if (sourceFilter !== "all") result = result.filter((o) => o.source_name === sourceFilter);
     if (categoryFilter !== "all") result = result.filter((o) => o.source_category === categoryFilter);
+    if (decorationFilter !== "all") {
+      result = result.filter((o) => extractDecorationMethods(o.description).includes(decorationFilter));
+    }
 
     result.sort((a, b) => {
       let va: string | number = "";
@@ -53,12 +89,14 @@ export default function OpportunitiesTable() {
     });
 
     return result;
-  }, [opportunities, search, sourceFilter, categoryFilter, sortField, sortDir]);
+  }, [opportunities, search, sourceFilter, categoryFilter, decorationFilter, sortField, sortDir]);
 
   const handleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortField(field); setSortDir("asc"); }
   };
+
+  const toggleExpand = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
 
   const exportCSV = () => {
     const esc = (v: string | null) => {
@@ -66,10 +104,11 @@ export default function OpportunitiesTable() {
       const s = v.replace(/"/g, '""');
       return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
     };
-    const headers = ["Title", "Source", "Category", "Organization", "Value", "Due Date", "Apparel Type", "URL"];
+    const headers = ["Title", "Source", "Category", "Organization", "Value", "Due Date", "Apparel Type", "Decoration Methods", "URL"];
     const rows = filtered.map((o) => [
       esc(o.title), esc(o.source_name), esc(o.source_category), esc(o.organization_name),
-      esc(o.estimated_value), esc(o.due_date), esc((o.apparel_type || []).join("; ")), esc(o.source_url),
+      esc(o.estimated_value), esc(o.due_date), esc((o.apparel_type || []).join("; ")),
+      esc(extractDecorationMethods(o.description).join("; ")), esc(o.source_url),
     ].join(","));
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -100,6 +139,10 @@ export default function OpportunitiesTable() {
           <option value="all">All Categories</option>
           {categories.map((c) => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
         </select>
+        <select value={decorationFilter} onChange={(e) => setDecorationFilter(e.target.value)} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <option value="all">All Decoration Methods</option>
+          {DECORATION_METHODS.map((m) => <option key={m.label} value={m.label}>{m.label}</option>)}
+        </select>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-sm text-gray-500">{filtered.length} results</span>
           <button onClick={exportCSV} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
@@ -114,6 +157,7 @@ export default function OpportunitiesTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
+                <th className="w-6 px-2 py-3" />
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer hover:text-gray-900" onClick={() => handleSort("title")}>
                   Title {sortField === "title" && (sortDir === "asc" ? "↑" : "↓")}
                 </th>
@@ -122,6 +166,7 @@ export default function OpportunitiesTable() {
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Category</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Apparel Type</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Decoration</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer hover:text-gray-900" onClick={() => handleSort("estimated_value")}>
                   Value {sortField === "estimated_value" && (sortDir === "asc" ? "↑" : "↓")}
                 </th>
@@ -133,35 +178,157 @@ export default function OpportunitiesTable() {
             <tbody>
               {filtered.slice(0, 100).map((o) => {
                 const isUrgent = o.due_date && new Date(o.due_date) <= new Date(Date.now() + 7 * 86400000) && new Date(o.due_date) >= new Date();
+                const isExpanded = expandedId === o.id;
+                const decorations = extractDecorationMethods(o.description);
+                const revenue = parseRevenue(o.estimated_value);
+
                 return (
-                  <tr key={o.id} className="border-b border-gray-50 hover:bg-blue-50/50 transition-colors">
-                    <td className="px-4 py-3 max-w-md">
-                      <a href={o.source_url || "#"} target="_blank" rel="noopener" className="text-blue-600 hover:underline font-medium line-clamp-2">
-                        {o.title}
-                      </a>
-                      {o.organization_name && <div className="text-xs text-gray-400 mt-0.5">{o.organization_name}</div>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{o.source_name}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full capitalize">{o.source_category}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(o.apparel_type || []).slice(0, 2).map((t) => (
-                          <span key={t} className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{t.replace(/_/g, " ")}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm">{o.estimated_value || "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {o.due_date ? (
-                        <span className={isUrgent ? "text-red-600 font-semibold" : ""}>
-                          {new Date(o.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                          {isUrgent && " ⚠"}
-                        </span>
-                      ) : "—"}
-                    </td>
-                  </tr>
+                  <>
+                    <tr
+                      key={o.id}
+                      className={`border-b border-gray-50 hover:bg-blue-50/50 transition-colors cursor-pointer ${isExpanded ? "bg-blue-50/40" : ""}`}
+                      onClick={() => toggleExpand(o.id)}
+                    >
+                      <td className="px-2 py-3 text-center text-gray-400 select-none">
+                        {isExpanded ? "▼" : "▶"}
+                      </td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <a
+                          href={o.source_url || "#"}
+                          target="_blank"
+                          rel="noopener"
+                          className="text-blue-600 hover:underline font-medium line-clamp-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {o.title}
+                        </a>
+                        {o.organization_name && <div className="text-xs text-gray-400 mt-0.5">{o.organization_name}</div>}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{o.source_name}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full capitalize">{o.source_category}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {(o.apparel_type || []).slice(0, 2).map((t) => (
+                            <span key={t} className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{t.replace(/_/g, " ")}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {decorations.length > 0
+                            ? decorations.slice(0, 2).map((d) => (
+                                <span key={d} className="inline-block bg-purple-50 text-purple-700 text-xs px-2 py-0.5 rounded-full">{d}</span>
+                              ))
+                            : <span className="text-gray-300 text-xs">—</span>
+                          }
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                        {revenue.numeric > 0 ? (
+                          <span className="text-green-700">{revenue.display}</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {o.due_date ? (
+                          <span className={isUrgent ? "text-red-600 font-semibold" : ""}>
+                            {new Date(o.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            {isUrgent && " ⚠"}
+                          </span>
+                        ) : "—"}
+                      </td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr key={`${o.id}-detail`} className="border-b border-gray-100 bg-blue-50/20">
+                        <td />
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* Summary */}
+                            <div className="md:col-span-2">
+                              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Request Summary</div>
+                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                                {o.description
+                                  ? o.description.length > 800
+                                    ? o.description.slice(0, 800) + "…"
+                                    : o.description
+                                  : <span className="text-gray-400 italic">No description available.</span>
+                                }
+                              </p>
+                            </div>
+
+                            {/* Qualification sidebar */}
+                            <div className="space-y-4">
+                              {/* Revenue */}
+                              <div>
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Potential Revenue</div>
+                                {revenue.numeric > 0 ? (
+                                  <div className="text-2xl font-bold text-green-700">{revenue.display}</div>
+                                ) : (
+                                  <div className="text-sm text-gray-400 italic">Not specified</div>
+                                )}
+                                {o.estimated_value && revenue.numeric > 0 && (
+                                  <div className="text-xs text-gray-400 mt-0.5">Raw: {o.estimated_value}</div>
+                                )}
+                              </div>
+
+                              {/* Decoration Methods */}
+                              <div>
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Decoration Methods</div>
+                                {decorations.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {decorations.map((d) => (
+                                      <span key={d} className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full font-medium">{d}</span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-sm text-gray-400 italic">Not specified in description</div>
+                                )}
+                              </div>
+
+                              {/* Apparel Types */}
+                              <div>
+                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Apparel Types</div>
+                                {(o.apparel_type || []).length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {(o.apparel_type || []).map((t) => (
+                                      <span key={t} className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{t.replace(/_/g, " ")}</span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-sm text-gray-400 italic">Not tagged</div>
+                                )}
+                              </div>
+
+                              {/* Location */}
+                              {(o.city || o.state) && (
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Location</div>
+                                  <div className="text-sm text-gray-700">{[o.city, o.state].filter(Boolean).join(", ")}</div>
+                                </div>
+                              )}
+
+                              {/* Source link */}
+                              {o.source_url && (
+                                <a
+                                  href={o.source_url}
+                                  target="_blank"
+                                  rel="noopener"
+                                  className="inline-block text-sm text-blue-600 hover:underline font-medium"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  View Full RFP →
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 );
               })}
             </tbody>
