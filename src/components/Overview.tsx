@@ -9,6 +9,37 @@ import {
 
 const COLORS = ["#0077b6", "#00b4d8", "#48cae4", "#90e0ef", "#caf0f8", "#023e8a", "#0096c7", "#ade8f4"];
 
+const DECORATION_METHODS = [
+  { label: "Embroidery", pattern: /\bembroidery\b|\bembroidered\b|\bembroider\b/i },
+  { label: "Screen Print", pattern: /\bscreen\s*print(ing|ed)?\b|\bsilkscreen\b/i },
+  { label: "Heat Transfer", pattern: /\bheat\s*transfer(s)?\b|\bheat\s*applied\b/i },
+  { label: "Sublimation", pattern: /\bsublimation\b|\bdye\s*sublimation\b|\bsublimated\b/i },
+  { label: "DTG", pattern: /\bdtg\b|\bdirect[\s-]to[\s-]garment\b/i },
+  { label: "Digital Print", pattern: /\bdigital\s*print(ing|ed)?\b/i },
+  { label: "Pad Print", pattern: /\bpad\s*print(ing|ed)?\b/i },
+  { label: "Laser Engrave", pattern: /\blaser\s*engrav(ing|ed|e)?\b/i },
+  { label: "Vinyl", pattern: /\bvinyl\b|\bcut\s*vinyl\b|\bheat\s*press\b/i },
+  { label: "Patches", pattern: /\bpatch(es)?\b|\btackle\s*twill\b|\bwoven\s*patch\b/i },
+  { label: "Reflective", pattern: /\breflective\b|\bhigh[\s-]vis\b/i },
+  { label: "Puff Print", pattern: /\bpuff\s*print(ing|ed)?\b|\bfoam\s*print\b/i },
+];
+
+function extractDecorationMethods(text: string | null): string[] {
+  if (!text) return [];
+  return DECORATION_METHODS.filter((m) => m.pattern.test(text)).map((m) => m.label);
+}
+
+function parseRevenue(raw: string | null): { display: string; numeric: number } {
+  if (!raw) return { display: "—", numeric: 0 };
+  const num = parseFloat(raw.replace(/[^0-9.-]/g, "")) || 0;
+  const display = num >= 1_000_000
+    ? `$${(num / 1_000_000).toFixed(2)}M`
+    : num >= 1_000
+    ? `$${(num / 1_000).toFixed(0)}K`
+    : raw;
+  return { display, numeric: num };
+}
+
 export default function Overview() {
   const [opportunities, setOpportunities] = useState<RFPOpportunity[]>([]);
   const [runs, setRuns] = useState<SearchRun[]>([]);
@@ -115,6 +146,61 @@ export default function Overview() {
             <Bar dataKey="value" fill="#48cae4" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Recently Qualified Opportunities */}
+      <div className="bg-white rounded-xl border p-5">
+        <h3 className="font-semibold text-sm text-gray-600 mb-4">RECENTLY DISCOVERED — QUALIFICATION SUMMARY</h3>
+        {opportunities.slice(0, 5).length === 0 ? (
+          <p className="text-gray-400 text-sm py-4">No opportunities found</p>
+        ) : (
+          <div className="space-y-4">
+            {opportunities.slice(0, 5).map((o) => {
+              const decorations = extractDecorationMethods(o.description);
+              const revenue = parseRevenue(o.estimated_value);
+              const isUrgent = o.due_date && new Date(o.due_date) <= new Date(Date.now() + 7 * 86400000) && new Date(o.due_date) >= new Date();
+              return (
+                <div key={o.id} className="border border-gray-100 rounded-lg p-4 hover:border-blue-200 transition-colors">
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <div className="min-w-0">
+                      <a href={o.source_url || "#"} target="_blank" rel="noopener" className="text-blue-600 hover:underline font-medium text-sm line-clamp-1">
+                        {o.title}
+                      </a>
+                      {o.organization_name && <div className="text-xs text-gray-400 mt-0.5">{o.organization_name} · {o.source_name}</div>}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {revenue.numeric > 0 ? (
+                        <div className="text-lg font-bold text-green-700">{revenue.display}</div>
+                      ) : (
+                        <div className="text-sm text-gray-400">Value TBD</div>
+                      )}
+                      {o.due_date && (
+                        <div className={`text-xs mt-0.5 ${isUrgent ? "text-red-600 font-semibold" : "text-gray-400"}`}>
+                          Due {new Date(o.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{isUrgent ? " ⚠" : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {o.description && (
+                    <p className="text-xs text-gray-600 leading-relaxed line-clamp-2 mb-2">{o.description}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {decorations.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {decorations.map((d) => (
+                          <span key={d} className="inline-block bg-purple-50 text-purple-700 text-xs px-2 py-0.5 rounded-full">{d}</span>
+                        ))}
+                      </div>
+                    )}
+                    {(o.apparel_type || []).map((t) => (
+                      <span key={t} className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{t.replace(/_/g, " ")}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Upcoming + Recent Runs */}
