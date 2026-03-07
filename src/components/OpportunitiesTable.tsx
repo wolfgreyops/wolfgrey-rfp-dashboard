@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { supabase, RFPOpportunity } from "@/lib/supabase";
+import { supabase, RFPOpportunity, isPastDue } from "@/lib/supabase";
 
 export default function OpportunitiesTable({ archived = false }: { archived?: boolean }) {
   const [opportunities, setOpportunities] = useState<RFPOpportunity[]>([]);
@@ -17,8 +17,8 @@ export default function OpportunitiesTable({ archived = false }: { archived?: bo
       const { data } = await supabase.from("rfp_opportunities").select("*").order("created_at", { ascending: false });
       const today = new Date().toISOString().split("T")[0];
       const filtered = (data || []).filter((o) => {
-        const isPastDue = o.due_date && o.due_date < today;
-        return archived ? isPastDue : !isPastDue;
+        const pastDue = isPastDue(o, today);
+        return archived ? pastDue : !pastDue;
       });
       setOpportunities(filtered);
       setLoading(false);

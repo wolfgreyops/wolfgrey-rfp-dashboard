@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase, RFPOpportunity, SearchRun } from "@/lib/supabase";
+import { supabase, RFPOpportunity, SearchRun, isPastDue } from "@/lib/supabase";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -21,7 +21,7 @@ export default function Overview() {
         supabase.from("rfp_search_runs").select("*").order("created_at", { ascending: false }).limit(20),
       ]);
       const today = new Date().toISOString().split("T")[0];
-      setOpportunities((oppRes.data || []).filter((o) => !o.due_date || o.due_date >= today));
+      setOpportunities((oppRes.data || []).filter((o) => !isPastDue(o, today)));
       setRuns(runRes.data || []);
       setLoading(false);
     }

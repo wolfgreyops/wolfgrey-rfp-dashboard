@@ -28,6 +28,18 @@ export interface RFPOpportunity {
   updated_at: string;
 }
 
+/** Check if an RFP is past due by due_date field or deadline parsed from title */
+export function isPastDue(o: RFPOpportunity, today: string): boolean {
+  if (o.due_date) return o.due_date < today;
+  // Parse "Deadline Month Day,Year" or "Deadline Month Day, Year" from title
+  const match = o.title.match(/Deadline\s+([A-Z][a-z]+)\s+(\d{1,2}),?\s*(\d{4})/i);
+  if (match) {
+    const parsed = new Date(`${match[1]} ${match[2]}, ${match[3]}`);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0] < today;
+  }
+  return false;
+}
+
 export interface SearchRun {
   id: string;
   source: string;

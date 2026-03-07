@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { supabase, RFPOpportunity } from "@/lib/supabase";
+import { supabase, RFPOpportunity, isPastDue } from "@/lib/supabase";
 
 const STAGES = [
   { id: "new", label: "New", color: "bg-blue-500", bg: "bg-blue-50", border: "border-blue-200" },
@@ -21,7 +21,7 @@ export default function Pipeline() {
   const load = useCallback(async () => {
     const { data } = await supabase.from("rfp_opportunities").select("*").order("updated_at", { ascending: false });
     const today = new Date().toISOString().split("T")[0];
-    setOpportunities((data || []).filter((o) => !o.due_date || o.due_date >= today));
+    setOpportunities((data || []).filter((o) => !isPastDue(o, today)));
     setLoading(false);
   }, []);
 
